@@ -25,98 +25,21 @@ def get_place_str(number):
     else:
         return s + 'th'
 
-class Poll:
-
-    def __init__(self, channel, poll_name='Generic Poll', description=None, 
-                 poll_choices=None, timeout=24*3600):
-        self.channel = channel                                      # channel the poll is in
-        self.name = poll_name                                       # name of the poll
-        self.choices = poll_choices                                 # initialize the choices/candidates
-        self.ballots = np.zeros((len(poll_choices),0), dtype=int)   # initialize an array for the ballots
-        self.voters = np.zeros((0,), dtype=int)                     # store user IDs for each voter
-        self.n_votes = 0
-        self.timeout = timeout                                      # poll time limit in seconds
-        self.time0 = time.monotonic()                               # starting time of the poll
-        self.closed = False                                         # if the poll is closed
-        self.embed = None
-
-        notice = f'''\n
-        To obtain your voting ballot for this poll, type the command `/getballot {self.name}`
-        The choices are listed below.
-        '''
-        if description is None:
-            description = f'''
-            This is a ranked-choice (AKA alternative) voting poll! You will be able to rank
-            each of the options in the poll from your 1st most preferred choice to your least
-            preferred choice, and the end result will be calculated in a way that makes the
-            most people happy as possible.''' 
-        self.description = description + notice                              # description of the poll
-        self.make_pretty_embed()
-    
-    def make_pretty_embed(self):
-        embed = discord.Embed(title=self.name, description=self.description, color=discord.Color.from_str('#663399'),
-                              timestamp=datetime.datetime.now())   # rebeccapurple
-        places = ''
-        for i in range(len(self.choices)):
-            places += f'**0**   *{get_place_str(i+1)}-choice votes*\n'
-        for i, choice in enumerate(self.choices):
-            embed.add_field(name=choice, value=places, inline=True)
-        embed.set_footer(text=f'{self.n_votes} voter(s)\nThis poll expires in {time_formatter(self.timeout)}')
-        self.embed = embed
-    
-    @tasks.loop(seconds=10)
-    async def message_update_loop(self, message):
-        print('Updating poll embed expiry times')
-        time1 = time.monotonic()
-        dt = time1 - self.time0
-        time_remaining = self.timeout - dt
-        places = ['' for _ in range(len(self.choices))]
-        for i in range(len(self.choices)):
-            for j in range(len(self.choices)):
-                current_votes = np.sum(self.ballots[j,:] == i+1)
-                places[j] += f'**{current_votes}**   *{get_place_str(i+1)}-choice votes*\n'
-        # update items
-        for i, choice in enumerate(self.choices):
-            self.embed.set_field_at(i, name=choice, value=places[i])
-        # update footer
-        self.embed = self.embed.set_footer(text=f'{self.n_votes} votes\nThis poll expires in {time_formatter(time_remaining)}')
-        await message.edit(embed=self.embed)
-
-    def add_new_ballot(self, ballot, user_id):
-        # check if the poll is still going
-        time1 = time.monotonic()
-        if time1 - self.time0 > self.timeout:
-            self.closed = True
-            return False
-        ballot = ballot.reshape((len(ballot),1))
-        self.ballots = np.concatenate((self.ballots, ballot), axis=1)
-        self.voters = np.append(self.voters, user_id)
-        self.n_votes += 1
-        print(ballot)
-        return True
-    
-    def run_election(self, quiet=False):
-        # get the results of the poll
-        _, output = rcv.run_election(self.choices, self.ballots)
-        if not quiet:
-            print(output)
-        return output
-
 class PollSelectMenu(discord.ui.Select):
    
     # Make a select menu with knowledge of the view it's encased in
-    def __init__(self, ni=0, parent_view=None):
+    def __init__(self, ni=0, choices=None):
         super().__init__(row=ni, min_values=1, max_values=1, 
                          placeholder=f'Choose your {get_place_str(ni+1)} option',
                          options=[])
-        self._parent_view = parent_view     # stored reference of the parent
         self.ni = ni                        # row index of the select menu 
+        self.choices = choices              # the choices
         self.selected = False               # no selection has been made yet
         self.create_initial_options()
     
     def create_initial_options(self):
         if self.ni == 0:
-            for i, choice in enumerate(self._parent_view.choices):
+            for i, choice in enumerate(self.choices):
                 self.add_option(label=choice, value=str(i))
 
     async def callback(self, interaction):
@@ -131,45 +54,58 @@ class PollSelectMenu(discord.ui.Select):
         # after a selection has been made, enable the next drop-down menu with the remaining options
         if self.ni < 3:
             # if this menu or any future menus already exist, remove them
-            for i in range(self.ni+1, len(self._parent_view.select_menus)):
-                if self._parent_view.select_menus[i] != 0:
-                    self._parent_view.remove_item(self._parent_view.select_menus[i])
-                    self._parent_view.select_menus[i] = 0
-            next_menu = PollSelectMenu(ni=self.ni+1, parent_view=self._parent_view)
-            prev_menu = self._parent_view.select_menus[0:self.ni]
+            for i in range(self.ni+1, len(self.view.select_menus)):
+                if self.view.select_menus[i] != 0:
+                    self.view.remove_item(self.view.select_menus[i])
+                    self.view.select_menus[i] = 0
+            next_menu = PollSelectMenu(ni=self.ni+1, choices=self.choices)
+            prev_menu = self.view.select_menus[0:self.ni]
             prev_vals = [pm.values[0] for pm in prev_menu]
             prev_vals += self.values[0]
-            for i, choice in enumerate(self._parent_view.choices):
+            for i, choice in enumerate(self.choices):
                 if str(i) not in prev_vals:
                     next_menu.add_option(label=choice, value=str(i))
-            self._parent_view.select_menus[self.ni+1] = next_menu
-            self._parent_view.add_item(next_menu)
+            self.view.select_menus[self.ni+1] = next_menu
+            self.view.add_item(next_menu)
             # enable the submit button
-            self._parent_view.submit_btn.disabled = False
+            self.view.submit_btn.disabled = False
 
         # update the message view
-        await interaction.response.edit_message(view=self._parent_view) 
+        await interaction.response.edit_message(view=self.view) 
+
 
 class SubmitButton(discord.ui.Button):
 
-    def __init__(self, parent_view=None):
+    def __init__(self):
         # start disabled
         super().__init__(style=discord.ButtonStyle.green, label=f'Submit', row=4, disabled=True)
-        self._parent_view = parent_view     # stored reference of the parent 
     
     async def callback(self, interaction):
         # first: create the ballot
-        ballot = self._parent_view.get_ballot()
+        ballot = self.view.get_ballot()
         # second: append the ballot to the poll object
-        added_ballot = self._parent_view.poll.add_new_ballot(ballot, interaction.user.id)
+        added_ballot = self.view.poll.add_new_ballot(ballot, interaction.user.id)
         # third: disable the submit button and all other menus
         self.disabled = True
-        for i in range(len(self._parent_view.select_menus)):
-            if self._parent_view.select_menus[i] != 0:
-                self._parent_view.select_menus[i].disabled = True
+        for i in range(len(self.view.select_menus)):
+            if self.view.select_menus[i] != 0:
+                self.view.select_menus[i].disabled = True
         # fourth: edit the message confirming that the ballot has been submitted
-        content = 'Thanks, your ballot has been submitted!' if added_ballot else 'Sorry, the poll is now closed!'
-        await interaction.response.edit_message(content=content, view=self._parent_view)
+        content = 'Thanks, your ballot has been submitted!' 
+        embed = None
+        if not added_ballot:
+            if self.view.poll.closed:
+                content = 'Sorry, the poll is now closed!'
+            else:
+                content = "You sneaky little wretch. You thought you could try to game the system by " + \
+                "requesting mutliple ballots at the same time?  Well guess what, I thought of that, and " + \
+                "now that you've been caught you're going to jail.  Yep, that's right, I'm calling the " + \
+                "police. Right now.  Voter fraud is a serious crime you know. How long do you think they'll " + \
+                "lock you up for?  Months?  Years?  Well, I guess we'll find out. That is, if Michael Stevens " + \
+                "from vsauce doesn't get to you first... "
+                embed = discord.Embed(url="https://www.youtube.com/watch?v=OB0wsQrMC3c&list=PL75wEN6hwvjhNcoPqBgDpwevaFw6LPhOJ&index=40",
+                                      title="He's coming for you", description="Better watch your back...")
+        await interaction.response.edit_message(content=content, view=self.view, embed=embed)
 
 class BallotView(discord.ui.View):
 
@@ -186,11 +122,11 @@ class BallotView(discord.ui.View):
     
     def create_view(self):        
         # I hate everything about this
-        select_menu = PollSelectMenu(ni=0, parent_view=self)
+        select_menu = PollSelectMenu(ni=0, choices=self.choices)
         self.select_menus[0] = select_menu 
         self.add_item(select_menu)
         # Add the submit button
-        self.submit_btn = SubmitButton(parent_view=self)
+        self.submit_btn = SubmitButton()
         self.add_item(self.submit_btn)
     
     def get_ballot(self):

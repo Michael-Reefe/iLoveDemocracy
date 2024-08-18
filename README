@@ -1,0 +1,14 @@
+A simple discord app that allows you to set up ranked-choice voting polls (AKA the alternative vote).
+
+To set up a poll, use the command `/newpoll [name] [choice1] [choice2] ... [time limit] [description]`.
+The arguments are the poll name, choices, time limit (in hours), and description.
+
+To close a poll manually, use the command `/closepoll [name]`.
+
+For those unfamiliar, a ranked choice vote works like this:
+	- Check if any candidate has more than 50% of the vote -> they win
+	- Check if there is only one remaining candidate -> they win
+	- Otherwise, eliminate the candidate with the least votes and redistribute those votes to
+	  the 2nd ranked choice
+	- Repeat until a winner is determined
+
