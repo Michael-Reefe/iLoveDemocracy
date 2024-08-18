@@ -40,17 +40,17 @@ class Poll:
         self.closed = False                                         # if the poll is closed
         self.embed = None
 
+        notice = f'''\n
+        To obtain your voting ballot for this poll, type the command `/getballot {self.name}`
+        The choices are listed below.
+        '''
         if description is None:
             description = f'''
             This is a ranked-choice (AKA alternative) voting poll! You will be able to rank
             each of the options in the poll from your 1st most preferred choice to your least
             preferred choice, and the end result will be calculated in a way that makes the
-            most people happy as possible. 
-
-            To obtain your voting ballot for this poll, type the command `/getballot {self.name}`
-            The choices are listed below.
-            '''
-        self.description = description                              # description of the poll
+            most people happy as possible.''' 
+        self.description = description + notice                              # description of the poll
         self.make_pretty_embed()
     
     def make_pretty_embed(self):
@@ -92,6 +92,7 @@ class Poll:
         self.ballots = np.concatenate((self.ballots, ballot), axis=1)
         self.voters = np.append(self.voters, user_id)
         self.n_votes += 1
+        print(ballot)
         return True
     
     def run_election(self, quiet=False):
@@ -101,54 +102,53 @@ class Poll:
             print(output)
         return output
 
-
-class PollButton(discord.ui.Button):
-
-    # Make a button with knowledge of the view it's encased in
-    def __init__(self, ni=0, nj=0, choice='', parent_view=None):
-        label = (choice + '\n' if ni == 0 else '') + f'({ni+1})'
-        super().__init__(style=discord.ButtonStyle.grey, label=label, row=nj)
+class PollSelectMenu(discord.ui.Select):
+   
+    # Make a select menu with knowledge of the view it's encased in
+    def __init__(self, ni=0, parent_view=None):
+        super().__init__(row=ni, min_values=1, max_values=1, 
+                         placeholder=f'Choose your {get_place_str(ni+1)} option',
+                         options=[])
         self._parent_view = parent_view     # stored reference of the parent
-        self.ni = ni                        # column index of the button 
-        self.nj = nj                        # row index of the button
-        self.choice = choice                # a button may have a choice label on it
-        self.pressed = False                # keeps track of the button state (pressed or not pressed)
-        self.disable_level = 0              # anything > 0 will cause it to be disabled
+        self.ni = ni                        # row index of the select menu 
+        self.selected = False               # no selection has been made yet
+        self.create_initial_options()
+    
+    def create_initial_options(self):
+        if self.ni == 0:
+            for i, choice in enumerate(self._parent_view.choices):
+                self.add_option(label=choice, value=str(i))
 
     async def callback(self, interaction):
-        if not self.pressed:
-            # disable all other buttons with the same number and all other buttons in the same row
-            # i indexes the column (which dictates the button number) and j indexes the row
-            for i in range(self._parent_view.buttons.shape[0]):
-                if i != self.ni:
-                    self._parent_view.buttons[i,self.nj].disable_level += 1
-                    self._parent_view.buttons[i,self.nj].label = f'({i+1})'
-            for j in range(self._parent_view.buttons.shape[1]):
-                if j != self.nj:
-                    self._parent_view.buttons[self.ni,j].disable_level += 1
-            # highlight the button that was selected
-            self.style = discord.ButtonStyle.blurple
-            # move the name of the choice onto this button
-            self.label = self._parent_view.choices[self.nj] + '\n' + f'({self.ni+1})'
-            # update the pressed state
-            self.pressed = True
-        else:
-            # re-enable all other buttons 
-            for i in range(self._parent_view.buttons.shape[0]):
-                if i != self.ni:
-                    self._parent_view.buttons[i,self.nj].disable_level -= 1
-            for j in range(self._parent_view.buttons.shape[1]):
-                if j != self.nj:
-                    self._parent_view.buttons[self.ni,j].disable_level -= 1
-            # un-highlight the button that was selected
-            self.style = discord.ButtonStyle.grey
-            # update the pressed state
-            self.pressed = False
-        # actually change the button states
-        self._parent_view.change_button_states()
-        # update the message view
-        await interaction.response.edit_message(view=self._parent_view)
 
+        # remove any previously set defaults
+        for i in range(len(self.options)):
+            self.options[i].default = False
+        # make the current selection the default so it remains
+        opt_vals = np.array([opt.value for opt in self.options])
+        self.options[np.where(opt_vals == self.values[0])[0][0]].default = True
+
+        # after a selection has been made, enable the next drop-down menu with the remaining options
+        if self.ni < 3:
+            # if this menu or any future menus already exist, remove them
+            for i in range(self.ni+1, len(self._parent_view.select_menus)):
+                if self._parent_view.select_menus[i] != 0:
+                    self._parent_view.remove_item(self._parent_view.select_menus[i])
+                    self._parent_view.select_menus[i] = 0
+            next_menu = PollSelectMenu(ni=self.ni+1, parent_view=self._parent_view)
+            prev_menu = self._parent_view.select_menus[0:self.ni]
+            prev_vals = [pm.values[0] for pm in prev_menu]
+            prev_vals += self.values[0]
+            for i, choice in enumerate(self._parent_view.choices):
+                if str(i) not in prev_vals:
+                    next_menu.add_option(label=choice, value=str(i))
+            self._parent_view.select_menus[self.ni+1] = next_menu
+            self._parent_view.add_item(next_menu)
+            # enable the submit button
+            self._parent_view.submit_btn.disabled = False
+
+        # update the message view
+        await interaction.response.edit_message(view=self._parent_view) 
 
 class SubmitButton(discord.ui.Button):
 
@@ -162,11 +162,11 @@ class SubmitButton(discord.ui.Button):
         ballot = self._parent_view.get_ballot()
         # second: append the ballot to the poll object
         added_ballot = self._parent_view.poll.add_new_ballot(ballot, interaction.user.id)
-        # third: disable the submit button and all other buttons
+        # third: disable the submit button and all other menus
         self.disabled = True
-        for i in range(self._parent_view.n):
-            for j in range(self._parent_view.n):
-                self._parent_view.buttons[i,j].disabled = True
+        for i in range(len(self._parent_view.select_menus)):
+            if self._parent_view.select_menus[i] != 0:
+                self._parent_view.select_menus[i].disabled = True
         # fourth: edit the message confirming that the ballot has been submitted
         content = 'Thanks, your ballot has been submitted!' if added_ballot else 'Sorry, the poll is now closed!'
         await interaction.response.edit_message(content=content, view=self._parent_view)
@@ -177,7 +177,7 @@ class BallotView(discord.ui.View):
         super().__init__(timeout=timeout, *args, **kwargs)          # Default timeout is 1 hour
         self.n = n                                                  # number of items in the poll
         self.poll = poll                                            # the actual poll object
-        self.buttons = np.full((n,n), dtype=object, fill_value=0.)  # a 2D array that will hold the buttons
+        self.select_menus = np.zeros(min(n, 4), dtype=object)       # holds the select menus for each place
         self.submit_btn = None                                      # holds the submit button
         if choices is None:
             choices = []
@@ -186,41 +186,19 @@ class BallotView(discord.ui.View):
     
     def create_view(self):        
         # I hate everything about this
-        for i in range(self.n):
-            for j in range(self.n):
-                button = PollButton(ni=i, nj=j, choice=self.choices[j], parent_view=self)
-                self.buttons[i,j] = button
-                self.add_item(button)
+        select_menu = PollSelectMenu(ni=0, parent_view=self)
+        self.select_menus[0] = select_menu 
+        self.add_item(select_menu)
         # Add the submit button
         self.submit_btn = SubmitButton(parent_view=self)
         self.add_item(self.submit_btn)
-
-    def change_button_states(self):
-        # need to use disable levels because a button could be 'locked' by multiple other buttons
-        for button in self.buttons.ravel():
-            if button.disable_level > 0:
-                button.disabled = True
-            else:
-                button.disabled = False
-        # check if the submit button should be enabled
-        numbers_pressed = np.zeros(self.n, dtype=bool)
-        for i in range(self.n):
-            for j in range(self.n):
-                if self.buttons[i,j].pressed:
-                    numbers_pressed[i] = True
-        wh = np.where(numbers_pressed)[0]
-        submit = numbers_pressed[0] and np.all(np.diff(wh) < 2)
-        if submit:
-            self.submit_btn.disabled = False
-        else:
-            self.submit_btn.disabled = True
     
     def get_ballot(self):
-        # check which buttons are pressed and create the ballot
+        # convert the select menu selections into a ballot
         ballot = np.zeros(self.n, dtype=int)
-        for j in range(self.n):
-            for i in range(self.n):
-                if self.buttons[i,j].pressed:
-                    ballot[j] = i+1
+        for j in range(min(self.n, 4)):
+            if self.select_menus[j] != 0:
+                if len(self.select_menus[j].values) > 0:
+                    ballot[int(self.select_menus[j].values[0])] = j + 1
 
         return ballot
