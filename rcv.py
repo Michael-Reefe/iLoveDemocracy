@@ -86,7 +86,7 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
             if n_winners > 1:
                 msg = f'THE OVERFLOWING VOTES WILL BE REDISTRIBUTED TO THE OTHER CANDIDATES'
                 print(msg)
-                output += msg + '\n'
+                output[j] += msg + '\n'
 
                 # all ballots after this are shifted to their next choice
                 whn = np.where(ballots[wh,:] == 1)[0][int(n_to_win):]
@@ -102,8 +102,16 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
 
         # second, check if the remaining number of candidates equals the remaining number of seats
         if n_cands <= (n_winners - current_winners):
+
             # if so, set all remaining candidates to winners
-            wh = np.where(votes > 0)[0]
+            winner_votes = votes[won]
+            votes[won] = -999
+            votes[eliminated] = -999
+            wh = np.where(votes >= 0)[0]
+            # set them back
+            votes[won] = winner_votes
+            votes[eliminated] = 0
+
             for whi in wh:
                 msg = f'RESULTS: {candidates_padded[whi]} HAS WON THE ELECTION WITH {str(int(votes[whi])).zfill(4)} VOTES ({votes[whi]/n_votes*100:.1f}%)\n'
                 msg += f'DUE TO THE ELIMINATION OF ALL OTHER CANDIDATES\n'
