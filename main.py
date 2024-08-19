@@ -11,9 +11,12 @@ import numpy as np
 import ui_elements
 import rcv
 
-# Replace these with your own guild ID and token
-GUILD_ID = 123456789
-TOKEN = 'your token here'
+# make a separate 'info.txt' file with your guild ID on the first line
+# and your token on the second line
+with open('info.txt', 'r') as file:
+    GUILD_ID = int(file.readline())
+    TOKEN = file.readline()
+
 
 class Palpy(discord.Client):
 
