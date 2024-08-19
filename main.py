@@ -66,20 +66,21 @@ client = Palpy()
 polls = {}
 
 
-@client.tree.command(guild=discord.Object(id=GUILD_ID), name='newpoll', description='Set up a new poll')
 # I hate this
+@client.tree.command(guild=discord.Object(id=GUILD_ID), name='newpoll', description='Set up a new poll')
 async def newpoll(interaction, name: str, choice1: str, choice2: Optional[str] = None,
                   choice3: Optional[str] = None, choice4: Optional[str] = None, choice5: Optional[str] = None,
                   choice6: Optional[str] = None, choice7: Optional[str] = None, choice8: Optional[str] = None,
                   choice9: Optional[str] = None, choice10: Optional[str] = None,
-                  time_limit: Optional[float] = 24., description: Optional[str] = None):
+                  time_limit: Optional[float] = 24., description: Optional[str] = None,
+                  winners: Optional[int] = 1):
     global polls
     c_all = [choice1, choice2, choice3, choice4, choice5, choice6, choice7, choice8, choice9, choice10]
     choices = []
     for c in c_all:
         if c is not None:
             choices.append(c)
-    newpoll = Poll(interaction.user.id, interaction.channel, name, description, choices, timeout=time_limit*3600)
+    newpoll = Poll(interaction.user.id, interaction.channel, name, description, choices, n_winners=winners, timeout=time_limit*3600)
     polls[name] = newpoll
     await interaction.response.send_message(embed=newpoll.embed, view=newpoll.view)
     message = await interaction.original_response()
@@ -143,7 +144,7 @@ async def closepoll(interaction, name: str):
 class Poll:
 
     def __init__(self, creator, channel, poll_name='Generic Poll', description=None, 
-                 poll_choices=None, timeout=24*3600):
+                 poll_choices=None, n_winners=1, timeout=24*3600):
         self.creator = creator                                      # the user ID of whoever made the poll
         self.channel = channel                                      # channel the poll is in
         self.name = poll_name                                       # name of the poll
@@ -151,6 +152,7 @@ class Poll:
         self.ballots = np.zeros((len(poll_choices),0), dtype=int)   # initialize an array for the ballots
         self.voters = np.zeros((0,), dtype=int)                     # store user IDs for each voter
         self.n_votes = 0
+        self.n_winners = n_winners                                  # how many winners the poll will have
         self.timeout = timeout                                      # poll time limit in seconds
         self.time0 = time.monotonic()                               # starting time of the poll
         self.closed = False                                         # if the poll is closed
@@ -159,7 +161,8 @@ class Poll:
 
         notice = f'''\n
         To obtain your voting ballot for this poll, use the button at the bottom 
-        of this message. The choices are listed below.
+        of this message. The choices are listed below. This poll will have 
+        {self.n_winners} winners.
         '''
         if description is None:
             description = f'''
@@ -228,7 +231,7 @@ class Poll:
     
     def run_election(self, quiet=False):
         # get the results of the poll
-        _, output = rcv.run_election(self.choices, self.ballots)
+        output = rcv.run_election(self.choices, self.ballots, self.n_winners)
         if not quiet:
             print(output)
         return output
