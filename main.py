@@ -11,10 +11,9 @@ import numpy as np
 import ui_elements
 import rcv
 
-# make a separate 'info.txt' file with your guild ID on the first line
-# and your token on the second line
+# make a separate 'info.txt' file with your 
+# token on the first line
 with open('info.txt', 'r') as file:
-    GUILD_ID = int(file.readline())
     TOKEN = file.readline()
 
 
@@ -30,7 +29,7 @@ class Palpy(discord.Client):
     async def on_ready(self):
         await self.wait_until_ready()
         if not self.synced:
-            await self.tree.sync(guild=discord.Object(id=GUILD_ID))
+            await self.tree.sync()
             self.synced = True
         print(f'Bot has logged in as {self.user}')
     
@@ -70,7 +69,7 @@ polls = {}
 
 
 # I hate this
-@client.tree.command(guild=discord.Object(id=GUILD_ID), name='newpoll', description='Set up a new poll')
+@client.tree.command(name='newpoll', description='Set up a new poll')
 async def newpoll(interaction, name: str, choice1: str, choice2: Optional[str] = None,
                   choice3: Optional[str] = None, choice4: Optional[str] = None, choice5: Optional[str] = None,
                   choice6: Optional[str] = None, choice7: Optional[str] = None, choice8: Optional[str] = None,
@@ -89,7 +88,7 @@ async def newpoll(interaction, name: str, choice1: str, choice2: Optional[str] =
     message = await interaction.original_response()
     newpoll.message_update_loop.start(message)
     
-@client.tree.command(guild=discord.Object(id=GUILD_ID), name='getballot', description='Get a ballot for the poll')
+@client.tree.command(name='getballot', description='Get a ballot for the poll')
 async def getballot(interaction, name: str):
 
     # Get the poll we want a ballot for
@@ -120,7 +119,7 @@ async def getballot(interaction, name: str):
 
     await interaction.response.send_message(description, view=ballot_view, ephemeral=True)
 
-@client.tree.command(guild=discord.Object(id=GUILD_ID), name='closepoll', description='Manually close a poll')
+@client.tree.command(name='closepoll', description='Manually close a poll')
 async def closepoll(interaction, name: str):
 
     poll = polls[name]
