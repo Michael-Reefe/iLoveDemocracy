@@ -36,7 +36,7 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
         
         # tally up the 1st choice votes
         votes = np.sum(ballots == 1, axis=1)
-        n_cands = np.sum(votes > 0)
+        n_cands = len(candidates) - np.sum(eliminated) - np.sum(won)
 
         msg = f'### VOTE TALLIES FOR ROUND {j} ###'
         print(msg)
