@@ -1,12 +1,14 @@
-import discord
-from discord.ext import commands, tasks
-from discord import app_commands
 from typing import Optional
 import datetime
 import time
-import copy
 import asyncio
+import logging
+import logging.handlers
+
 import numpy as np
+import discord
+from discord import app_commands
+from discord.ext import tasks
 
 import ui_elements
 import rcv
@@ -15,6 +17,21 @@ import rcv
 # token on the first line
 with open('info.txt', 'r') as file:
     TOKEN = file.readline()
+
+# set up basic logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logformatter = logging.Formatter('%(asctime)s -- %(levelname)s: (%(threadName)-10s) Module: %(module)s | Function: %(funcName)s | Message: %(message)s',
+                                 datefmt='%Y-%m-%d %H:%M:%S%z')
+
+filehandler = logging.handlers.RotatingFileHandler('iLoveDemocracy.log', maxBytes=10000000, backupCount=3)
+filehandler.setFormatter(logformatter)
+logger.addHandler(filehandler)
+
+streamhandler = logging.StreamHandler()
+streamhandler.setFormatter(logformatter)
+logger.addHandler(streamhandler)
+
 
 
 class Palpy(discord.Client):
@@ -31,37 +48,7 @@ class Palpy(discord.Client):
         if not self.synced:
             await self.tree.sync()
             self.synced = True
-        print(f'Bot has logged in as {self.user}')
-    
-    # Start the background task 
-    async def setup_hook(self):
-        self.check_poll_results.start()
-
-    # background task: check if any polls have been closed and print the results
-    @tasks.loop(seconds=60)
-    async def check_poll_results(self):
-        global polls
-        time1 = time.monotonic()
-        print('Checking for closed polls')
-        d2 = polls.copy()
-        for poll in d2.values():
-            channel = copy.copy(poll.channel)
-            dt = time1 - poll.time0
-            time_remaining = poll.timeout - dt
-            if time_remaining <= 0: 
-                print(f'Poll {poll.name} has expired. Printing results.')
-                # poll has expired - run the results 
-                output = poll.run_election()
-                poll.closed = True
-                # stop tasks that are updating the embed
-                poll.message_update_loop.cancel()
-                poll.disable_buttons()
-                polls.pop(poll.name)
-                del poll
-                # send the results messages
-                for oi in output:
-                    await channel.send('```' + oi + '```', silent=True)
-                    await asyncio.sleep(0.5)
+        logging.info(f'Bot has logged in as {self.user}')
 
 
 client = Palpy()
@@ -83,10 +70,11 @@ async def newpoll(interaction, name: str, choice1: str, choice2: Optional[str] =
         if c is not None:
             choices.append(c)
     newpoll = Poll(interaction.user.id, interaction.channel, name, description, choices, n_winners=winners, timeout=time_limit*3600)
-    polls[name] = newpoll
     await interaction.response.send_message(embed=newpoll.embed, view=newpoll.view)
     message = await interaction.original_response()
-    newpoll.message_update_loop.start(message)
+    newpoll.message = message
+    polls[name] = newpoll
+    newpoll.message_update_loop.start()
     
 @client.tree.command(name='getballot', description='Get a ballot for the poll')
 async def getballot(interaction, name: str):
@@ -127,20 +115,9 @@ async def closepoll(interaction, name: str):
         await interaction.response.send_message('Only the creator of the poll can close it!', ephemeral=True)
         return
 
-    print(f'Poll {name} has been manually closed. Printing results.')
-    channel = poll.channel
-    output = poll.run_election()
-    poll.closed = True
-    # stop tasks that are updating the embed
-    poll.message_update_loop.cancel()
-    poll.disable_buttons()
-    polls.pop(name)
-    del poll
-    # send the results messages
-    await interaction.response.send_message('```' + output[0] + '```')
-    for oi in output[1:]:
-        await channel.send('```' + oi + '```', silent=True)
-        await asyncio.sleep(0.5)
+    logging.info(f'Poll {name} has been manually closed. Printing results.')
+    await interaction.response.send_message(f'{interaction.user.name} has closed the poll "{name}" early! The results will now be shown.')
+    await poll.cleanup()
 
 
 class Poll:
@@ -160,6 +137,8 @@ class Poll:
         self.closed = False                                         # if the poll is closed
         self.embed = None                                           # will hold the embed
         self.view = None                                            # will hold the view 
+        self.message = None                                         # will hold the message
+        self.buttons = []                                           # will hold the buttons
 
         notice = f'''\n
         To obtain your voting ballot for this poll, use the button at the bottom 
@@ -184,15 +163,34 @@ class Poll:
             places += f'**0**   *{ui_elements.get_place_str(i+1)}-choice votes*\n'
         for i, choice in enumerate(self.choices):
             embed.add_field(name=choice, value=places, inline=True)
-        embed.set_footer(text=f'{self.n_votes} voter(s)\nThis poll expires in {ui_elements.time_formatter(self.timeout)}')
+        embed.set_footer(text=f'{self.n_votes} voter(s)\nThis poll closes in {ui_elements.time_formatter(self.timeout)}')
         self.embed = embed
     
-    @tasks.loop(seconds=10)
-    async def message_update_loop(self, message):
-        print('Updating poll embed expiry times')
+    @tasks.loop(seconds=60)
+    async def message_update_loop(self):
         time1 = time.monotonic()
         dt = time1 - self.time0
         time_remaining = self.timeout - dt
+        if time_remaining > 0:
+            logging.info('Updating poll embed')
+            places = ['' for _ in range(len(self.choices))]
+            for i in range(len(self.choices)):
+                for j in range(len(self.choices)):
+                    current_votes = np.sum(self.ballots[j,:] == i+1)
+                    places[j] += f'**{current_votes}**   *{ui_elements.get_place_str(i+1)}-choice votes*\n'
+            # update items
+            for i, choice in enumerate(self.choices):
+                self.embed.set_field_at(i, name=choice, value=places[i])
+            # update footer
+            self.embed = self.embed.set_footer(text=f'{self.n_votes} votes\nThis poll closes in {ui_elements.time_formatter(time_remaining)}')
+            await self.message.edit(embed=self.embed)
+        else:
+            await self.channel.send(f'The poll "{self.name}" is now closed! The results will now be shown.')
+            await self.cleanup()
+    
+    async def cleanup(self):
+        # do a final update to the embed
+        logging.info('Updating poll embed')
         places = ['' for _ in range(len(self.choices))]
         for i in range(len(self.choices)):
             for j in range(len(self.choices)):
@@ -202,19 +200,37 @@ class Poll:
         for i, choice in enumerate(self.choices):
             self.embed.set_field_at(i, name=choice, value=places[i])
         # update footer
-        self.embed = self.embed.set_footer(text=f'{self.n_votes} votes\nThis poll expires in {ui_elements.time_formatter(time_remaining)}')
-        await message.edit(embed=self.embed)
+        self.embed.set_footer(text=f'{self.n_votes} votes\nThis poll is now closed!')
+        await self.message.edit(embed=self.embed)
+
+        global polls
+
+        # run the results
+        logging.info(f'Poll {self.name} has closed. Printing results.')
+        output = self.run_election()
+        for i,oi in enumerate(output):
+            await self.channel.send('```' + oi + '```', silent=False if i == 0 else True)
+            await asyncio.sleep(0.5)
+
+        self.closed = True
+        await self.disable_buttons()
+
+        polls.pop(self.name)
+        self.message_update_loop.cancel()
+        del self
     
     def make_button_view(self):
         self.view = discord.ui.View()
         ballot_btn = BallotButton(self.name)
         close_btn = CloseButton(self.name)
+        self.buttons = [ballot_btn, close_btn]
         self.view.add_item(ballot_btn)
         self.view.add_item(close_btn)
     
-    def disable_buttons(self):
-        for child in self.view.children:
-            child.disabled = True
+    async def disable_buttons(self):
+        for btn in self.buttons:
+            btn.disabled = True
+        await self.message.edit(view=self.view)
 
     def add_new_ballot(self, ballot, user_id):
         # check if the poll is still going
@@ -228,14 +244,14 @@ class Poll:
         self.ballots = np.concatenate((self.ballots, ballot), axis=1)
         self.voters = np.append(self.voters, user_id)
         self.n_votes += 1
-        print(ballot)
+        logging.debug(ballot)
         return True
     
     def run_election(self, quiet=False):
         # get the results of the poll
         output = rcv.run_election(self.choices, self.ballots, self.n_winners)
         if not quiet:
-            print(output)
+            logging.info(output)
         return output
 
 

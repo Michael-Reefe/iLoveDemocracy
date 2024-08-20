@@ -1,9 +1,5 @@
 import discord
-from discord.ext import tasks
 import numpy as np
-import time
-import datetime
-import rcv
 
 def time_formatter(seconds):
     if seconds > 3600*2:

@@ -19,7 +19,6 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
             candidates_padded[c] += ' '*diff
 
     msg = 'BEGINNING ELECTION'
-    print(msg)
     output[0] = msg
     j = 1
     eliminated = np.zeros(len(candidates), dtype=bool)
@@ -39,11 +38,9 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
         n_cands = len(candidates) - np.sum(eliminated) - np.sum(won)
 
         msg = f'### VOTE TALLIES FOR ROUND {j} ###'
-        print(msg)
         output[j] = msg + '\n'
         output[j] += print_vote_tallies(candidates_padded, votes, n_votes, won)
         msg = f'####################################'
-        print(msg)
         output[j] += msg + '\n'
 
         # first, check if any candidate has more than the threshold of the vote as their 1st choice
@@ -61,7 +58,6 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
             msg = f'RESULTS: {candidates_padded[wh]} HAS WON THE ELECTION WITH {str(int(votes[wh])).zfill(4)} VOTES ({votes[wh]/n_votes*100:.1f}%)'
             current_winners += 1 
             won[wh] = True
-            print(msg)
             output[j] += msg + '\n'
 
             # if we've reached the target number of winners, stop the counting
@@ -69,15 +65,12 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
 
                 # do a final print-out
                 msg = f'### FINAL VOTE TALLIES       ###'
-                print(msg)
                 output[j] += msg + '\n'
                 output[j] += print_vote_tallies(candidates_padded, votes, n_votes, won, final=True)
                 msg = f'################################'
-                print(msg)
                 output[j] += msg + '\n'
 
                 msg = f'I LOVE DEMOCRACY'
-                print(msg)
                 output[j] += msg
                 return output
 
@@ -85,7 +78,6 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
             # the voters' next choices
             if n_winners > 1:
                 msg = f'THE OVERFLOWING VOTES WILL BE REDISTRIBUTED TO THE OTHER CANDIDATES'
-                print(msg)
                 output[j] += msg + '\n'
 
                 # all ballots after this are shifted to their next choice
@@ -94,7 +86,6 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
 
                 # restart the loop so that we recount all the votes before deciding to eliminate anyone
                 msg = f'THE ELECTION WILL CONTINUE'
-                print(msg)
                 output[j] += msg + '\n'
                 j += 1
 
@@ -117,21 +108,17 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
                 msg += f'DUE TO THE ELIMINATION OF ALL OTHER CANDIDATES\n'
                 current_winners += 1
                 won[whi] = True
-                print(msg)
                 output[j] += msg
 
             # do a final print-out
             msg = f'### FINAL VOTE TALLIES       ###'
-            print(msg)
             output[j] += msg + '\n'
             output[j] += print_vote_tallies(candidates_padded, votes, n_votes, won, final=True)
             msg = f'################################'
-            print(msg)
             output[j] += msg + '\n'
 
 
             msg = f'I LOVE DEMOCRACY'
-            print(msg)
             output[j] += msg
 
             return output
@@ -157,12 +144,10 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
         msg = f'RESULTS: {candidates_padded[last]} HAS BEEN ELIMINATED FROM THE RACE WITH {str(int(votes[last])).zfill(4)} VOTES ({votes[last]/n_votes*100:.1f}%)\n'
         msg += f'THEIR VOTES WILL BE REDISTRIBUTED TO THE OTHER CANDIDATES\n'
         msg += f'THE ELECTION WILL CONTINUE'
-        print(msg)
         output[j] += msg + '\n'
 
         if j > 100:
             msg = f'CRITICAL: SOMETHING HAS GONE WRONG, THE VOTING HAS GONE ON FOR 1000 ROUNDS. STOPPING ELECTION.'
-            print(msg)
             output[j] += msg
             return output
 
@@ -184,7 +169,6 @@ def print_vote_tallies(candidates_padded, votes, n_votes, won, final=False):
     for c in range(len(candidates_padded)):
         status = 'WON       ' if won[c] else 'RUNNING   ' if (votes[c] > 0 and not final) else 'ELIMINATED'
         msg = f'{status} | {candidates_padded[c]} | {str(int(votes[c])).zfill(4)} | {votes[c]/n_votes*100:.1f}%'
-        print(msg)
         output += msg + '\n'
     return output
 
