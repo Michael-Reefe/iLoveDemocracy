@@ -105,6 +105,7 @@ async def getballot(interaction, name: str):
     the poll results will be announced in a separate message.\n
     """
 
+    logging.info(f'{interaction.user.id} has requested a ballot for the poll "{name}"')
     await interaction.response.send_message(description, view=ballot_view, ephemeral=True)
 
 @client.tree.command(name='closepoll', description='Manually close a poll')
@@ -152,8 +153,11 @@ class Poll:
             preferred choice, and the end result will be calculated in a way that makes the
             most people happy as possible.''' 
         self.description = description + notice                              # description of the poll
+
         self.make_pretty_embed()
         self.make_button_view()
+    
+        logging.info(f'A new poll "{self.name}" has been created with the options {self.choices}')
     
     def make_pretty_embed(self):
         embed = discord.Embed(title=self.name, description=self.description, color=discord.Color.from_str('#663399'),
@@ -168,6 +172,8 @@ class Poll:
     
     @tasks.loop(seconds=60)
     async def message_update_loop(self):
+        assert self.message is not None                                     # make sure message is set
+        self.message = await self.channel.fetch_message(self.message.id)    # fetch the message from its ID, otherwise expires after 15 mins
         time1 = time.monotonic()
         dt = time1 - self.time0
         time_remaining = self.timeout - dt
@@ -183,6 +189,7 @@ class Poll:
                 self.embed.set_field_at(i, name=choice, value=places[i])
             # update footer
             self.embed = self.embed.set_footer(text=f'{self.n_votes} votes\nThis poll closes in {ui_elements.time_formatter(time_remaining)}')
+            self.embed.timestamp = datetime.datetime.now()
             await self.message.edit(embed=self.embed)
         else:
             await self.channel.send(f'The poll "{self.name}" is now closed! The results will now be shown.')
@@ -191,6 +198,7 @@ class Poll:
     async def cleanup(self):
         # do a final update to the embed
         logging.info('Updating poll embed')
+        self.message = await self.channel.fetch_message(self.message.id)
         places = ['' for _ in range(len(self.choices))]
         for i in range(len(self.choices)):
             for j in range(len(self.choices)):
@@ -220,7 +228,7 @@ class Poll:
         del self
     
     def make_button_view(self):
-        self.view = discord.ui.View()
+        self.view = discord.ui.View(timeout=self.timeout)
         ballot_btn = BallotButton(self.name)
         close_btn = CloseButton(self.name)
         self.buttons = [ballot_btn, close_btn]
@@ -240,18 +248,20 @@ class Poll:
             return False
         if user_id in self.voters:
             return False
+        logging.info(f'A user has cast their vote for the poll "{self.name}": {ballot}')
         ballot = ballot.reshape((len(ballot),1))
         self.ballots = np.concatenate((self.ballots, ballot), axis=1)
         self.voters = np.append(self.voters, user_id)
         self.n_votes += 1
         logging.debug(ballot)
+        np.savez(f'{self.name}.ballot.npz', candidates=self.choices, ballots=self.ballots, voters=self.voters)
         return True
     
     def run_election(self, quiet=False):
         # get the results of the poll
         output = rcv.run_election(self.choices, self.ballots, self.n_winners)
         if not quiet:
-            logging.info(output)
+            logging.info(''.join(output))
         return output
 
 

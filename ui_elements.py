@@ -48,7 +48,7 @@ class PollSelectMenu(discord.ui.Select):
         self.options[np.where(opt_vals == self.values[0])[0][0]].default = True
 
         # after a selection has been made, enable the next drop-down menu with the remaining options
-        if self.ni < 3:
+        if self.ni < min(len(self.choices)-1, 3):
             # if this menu or any future menus already exist, remove them
             for i in range(self.ni+1, len(self.view.select_menus)):
                 if self.view.select_menus[i] != 0:
