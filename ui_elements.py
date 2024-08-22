@@ -162,7 +162,7 @@ class PollButton(discord.ui.Button):
     async def callback(self, interaction):
         # if another button in the current view is pressed, unpress it
         for button in self.view.buttons:
-            if button.pressed:
+            if button.pressed and button is not self:
                 button.pressed = False
                 button.style = discord.ButtonStyle.grey
         # press the current button
