@@ -43,10 +43,10 @@ class Palpy(discord.Client):
         super().__init__(intents=intents)
         self.synced = False
         self.tree = app_commands.CommandTree(self)
+        self.tree.clear_commands(guild=None)
 
     async def on_ready(self):
         await self.wait_until_ready()
-        self.tree.clear_commands(guild=None)
         if not self.synced:
             await self.tree.sync()
             self.synced = True
