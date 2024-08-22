@@ -155,7 +155,7 @@ class STVView(discord.ui.View):
 class PollButton(discord.ui.Button):
 
     def __init__(self, nj):
-        super().__init__(row=0, label=f'{nj+1}', style=discord.ButtonStyle.grey)
+        super().__init__(row=0, label=f'{nj+1} ⭐', style=discord.ButtonStyle.grey)
         self.nj = nj
         self.pressed = False
     

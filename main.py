@@ -216,7 +216,7 @@ class Poll:
                 places += f'**0**   *{ui_elements.get_place_str(i+1)}-choice votes*\n'
         elif self.type == 'STAR':
             for i in range(5,-1,-1):
-                places += f'**0**   *{i}-star votes*\n'
+                places += f'**0**   *{i} ⭐ votes*\n'
         for i, choice in enumerate(self.choices):
             embed.add_field(name=choice, value=places, inline=True)
         embed.set_footer(text=f'{self.n_votes} voter(s)\nThis poll closes in {ui_elements.time_formatter(self.timeout)}')
@@ -241,7 +241,7 @@ class Poll:
                 for i in range(5,-1,-1):
                     for j in range(len(self.choices)):
                         current_votes = np.sum(self.ballots[j,:] == i)
-                        places[j] += f'**{current_votes}**   *{i}-star votes*\n'
+                        places[j] += f'**{current_votes}**   *{i} ⭐ votes*\n'
             # update items
             for i, choice in enumerate(self.choices):
                 self.embed.set_field_at(i, name=choice, value=places[i])
@@ -267,7 +267,7 @@ class Poll:
             for i in range(5,-1,-1):
                 for j in range(len(self.choices)):
                     current_votes = np.sum(self.ballots[j,:] == i)
-                    places[j] += f'**{current_votes}**   *{i}-star votes*\n'
+                    places[j] += f'**{current_votes}**   *{i} ⭐ votes*\n'
         # update items
         for i, choice in enumerate(self.choices):
             self.embed.set_field_at(i, name=choice, value=places[i])
