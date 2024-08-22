@@ -187,11 +187,19 @@ class Poll:
         {self.n_winners} winners.
         '''
         if description is None:
-            description = f'''
-            This is a ranked-choice (AKA alternative) voting poll! You will be able to rank
-            each of the options in the poll from your 1st most preferred choice to your least
-            preferred choice, and the end result will be calculated in a way that makes the
-            most people happy as possible.''' 
+            if self.type == 'STV':
+                description = f'''
+                This is a ranked-choice (AKA alternative) voting poll! You will be able to rank
+                each of the options in the poll from your 1st most preferred choice to your least
+                preferred choice, and the end result will be calculated in a way that (hopefully)
+                makes the most people happy as possible.''' 
+            elif self.type == 'STAR':
+                description = f'''
+                This is a score voting poll! You will be able to rank each of the options in the
+                poll by giving them 0-5 stars. More stars = more support, so give your favorites
+                a 5 and give your least favorites a 0. At the end the results will be calculated
+                in a way that (hopefully) makes the most people happy as possible.
+                '''
         self.description = description + notice                              # description of the poll
 
         self.make_pretty_embed()
