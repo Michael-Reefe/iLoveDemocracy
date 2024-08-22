@@ -324,7 +324,7 @@ class Poll:
     
     def run_election(self, quiet=False):
         # get the results of the poll
-        if type == 'STV':
+        if self.type == 'STV':
             output = rcv.run_election(self.choices, self.ballots, self.n_winners)
             if not quiet:
                 logging.info(''.join(output))
