@@ -1,5 +1,6 @@
 import discord
 import numpy as np
+import logging
 
 def time_formatter(seconds):
     if seconds > 3600*2:
@@ -83,9 +84,16 @@ class SubmitButton(discord.ui.Button):
         added_ballot = self.view.poll.add_new_ballot(ballot, interaction.user.id)
         # third: disable the submit button and all other menus
         self.disabled = True
-        for i in range(len(self.view.select_menus)):
-            if self.view.select_menus[i] != 0:
-                self.view.select_menus[i].disabled = True
+        if type(self.view) is STVView:
+            for i in range(len(self.view.select_menus)):
+                if self.view.select_menus[i] != 0:
+                    self.view.select_menus[i].disabled = True
+        elif type(self.view) is STARSubmitView:
+            for choice_view in self.view.choice_views:
+                for btn in choice_view.buttons:
+                    btn.disabled = True
+        else:
+            raise ValueError("wtf did you do")
         # fourth: edit the message confirming that the ballot has been submitted
         content = 'Thanks, your ballot has been submitted!' 
         embed = None
@@ -101,9 +109,17 @@ class SubmitButton(discord.ui.Button):
                 "from vsauce doesn't get to you first... "
                 embed = discord.Embed(url="https://www.youtube.com/watch?v=OB0wsQrMC3c&list=PL75wEN6hwvjhNcoPqBgDpwevaFw6LPhOJ&index=40",
                                       title="He's coming for you", description="Better watch your back...")
+
         await interaction.response.edit_message(content=content, view=self.view, embed=embed)
 
-class BallotView(discord.ui.View):
+        # need to also update the previous messages if its a star poll
+        if type(self.view) is STARSubmitView:
+            for i in range(len(self.view.choice_messages)):
+                msg = self.view.choice_messages[i]
+                view = self.view.choice_views[i]
+                # await msg.edit(view=view)
+
+class STVView(discord.ui.View):
 
     def __init__(self, n, poll, choices=None, timeout=3600, *args, **kwargs):        
         super().__init__(timeout=timeout, *args, **kwargs)          # Default timeout is 1 hour
@@ -134,3 +150,92 @@ class BallotView(discord.ui.View):
                     ballot[int(self.select_menus[j].values[0])] = j + 1
 
         return ballot
+
+
+class PollButton(discord.ui.Button):
+
+    def __init__(self, nj):
+        super().__init__(row=0, label=f'{nj+1}', style=discord.ButtonStyle.grey)
+        self.nj = nj
+        self.pressed = False
+    
+    async def callback(self, interaction):
+        # if another button in the current view is pressed, unpress it
+        for button in self.view.buttons:
+            if button.pressed:
+                button.pressed = False
+                button.style = discord.ButtonStyle.grey
+        # press the current button
+        self.style = discord.ButtonStyle.blurple
+        self.pressed = True
+        await interaction.response.edit_message(view=self.view)
+
+
+class STARChoiceView(discord.ui.View):
+
+    def __init__(self, n, poll, choices=None, timeout=3600, *args, **kwargs):
+        super().__init__(timeout=timeout, *args, **kwargs)
+        self.n = n
+        self.poll = poll
+        self.buttons = np.zeros(5, dtype=object)
+        if choices is None:
+            choices = []
+        self.choices = choices
+        self.create_view()
+
+    def create_view(self):        
+        # I hate everything about this
+        for j in range(5):
+            btn = PollButton(nj=j)
+            self.buttons[j] = btn
+            self.add_item(btn)
+
+class STARSubmitView(discord.ui.View):
+
+    def __init__(self, n, poll, choice_views=None, timeout=3600, *args, **kwargs):
+        super().__init__(timeout=timeout, *args, **kwargs)
+        self.n = n
+        self.poll = poll
+        self.choice_views = choice_views
+        # will be filled in later:
+        self.choice_messages = None
+        assert len(self.choice_views) == self.n
+        self.submit_btn = None
+        self.create_view()
+    
+    def create_view(self):
+        self.submit_btn = SubmitButton()
+        # STAR voting is much more lenient in the accepted format - can submit right away (all 0s) or at any point later
+        self.submit_btn.disabled = False
+        self.add_item(self.submit_btn)
+    
+    def get_ballot(self):
+        # check which button is pressed in each choice view
+        ballot = np.zeros(self.n, dtype=int)
+        for i, choice_view in enumerate(self.choice_views):
+            for btn in choice_view.buttons:
+                if btn.pressed:
+                    assert ballot[i] == 0
+                    ballot[i] = btn.nj + 1
+        return ballot
+
+
+class STAR:
+
+    def __init__(self, n, poll, choices=None, timeout=3600):
+
+        # set base attributes
+        self.n = n
+        self.poll = poll
+        if choices is None:
+            choices = []
+        self.choices = choices
+
+        # set a button view for each poll choice
+        self.choice_views = []
+        for choice in self.choices:
+            btn_view = STARChoiceView(self.n, self.poll, self.choices, timeout=timeout)
+            self.choice_views.append(btn_view)
+        
+        # set the final submit button view
+        self.submit_view = STARSubmitView(self.n, self.poll, self.choice_views, timeout=timeout)
