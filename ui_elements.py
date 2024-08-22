@@ -166,8 +166,12 @@ class PollButton(discord.ui.Button):
                 button.pressed = False
                 button.style = discord.ButtonStyle.grey
         # press the current button
-        self.style = discord.ButtonStyle.blurple
-        self.pressed = True
+        if not self.pressed:
+            self.style = discord.ButtonStyle.blurple
+            self.pressed = True
+        else:
+            self.style = discord.ButtonStyle.grey
+            self.pressed = False
         await interaction.response.edit_message(view=self.view)
 
 
