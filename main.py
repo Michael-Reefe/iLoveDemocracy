@@ -43,6 +43,7 @@ class Palpy(discord.Client):
         super().__init__(intents=intents)
         self.synced = False
         self.tree = app_commands.CommandTree(self)
+        self.tree.clear_commands(guild=None)
 
     async def on_ready(self):
         await self.wait_until_ready()
@@ -187,11 +188,19 @@ class Poll:
         {self.n_winners} winners.
         '''
         if description is None:
-            description = f'''
-            This is a ranked-choice (AKA alternative) voting poll! You will be able to rank
-            each of the options in the poll from your 1st most preferred choice to your least
-            preferred choice, and the end result will be calculated in a way that makes the
-            most people happy as possible.''' 
+            if self.type == 'STV':
+                description = f'''
+                This is a ranked-choice (AKA alternative) voting poll! You will be able to rank
+                each of the options in the poll from your 1st most preferred choice to your least
+                preferred choice, and the end result will be calculated in a way that (hopefully)
+                makes the most people happy as possible.''' 
+            elif self.type == 'STAR':
+                description = f'''
+                This is a score voting poll! You will be able to rank each of the options in the
+                poll by giving them 0-5 stars. More stars = more support, so give your favorites
+                a 5 and give your least favorites a 0. At the end the results will be calculated
+                in a way that (hopefully) makes the most people happy as possible.
+                '''
         self.description = description + notice                              # description of the poll
 
         self.make_pretty_embed()
@@ -208,7 +217,7 @@ class Poll:
                 places += f'**0**   *{ui_elements.get_place_str(i+1)}-choice votes*\n'
         elif self.type == 'STAR':
             for i in range(5,-1,-1):
-                places += f'**0**   *{i}-star votes*\n'
+                places += f'**0**   *{i} ⭐ votes*\n'
         for i, choice in enumerate(self.choices):
             embed.add_field(name=choice, value=places, inline=True)
         embed.set_footer(text=f'{self.n_votes} voter(s)\nThis poll closes in {ui_elements.time_formatter(self.timeout)}')
@@ -233,7 +242,7 @@ class Poll:
                 for i in range(5,-1,-1):
                     for j in range(len(self.choices)):
                         current_votes = np.sum(self.ballots[j,:] == i)
-                        places[j] += f'**{current_votes}**   *{i}-star votes*\n'
+                        places[j] += f'**{current_votes}**   *{i} ⭐ votes*\n'
             # update items
             for i, choice in enumerate(self.choices):
                 self.embed.set_field_at(i, name=choice, value=places[i])
@@ -259,7 +268,7 @@ class Poll:
             for i in range(5,-1,-1):
                 for j in range(len(self.choices)):
                     current_votes = np.sum(self.ballots[j,:] == i)
-                    places[j] += f'**{current_votes}**   *{i}-star votes*\n'
+                    places[j] += f'**{current_votes}**   *{i} ⭐ votes*\n'
         # update items
         for i, choice in enumerate(self.choices):
             self.embed.set_field_at(i, name=choice, value=places[i])
@@ -315,7 +324,7 @@ class Poll:
     
     def run_election(self, quiet=False):
         # get the results of the poll
-        if type == 'STV':
+        if self.type == 'STV':
             output = rcv.run_election(self.choices, self.ballots, self.n_winners)
             if not quiet:
                 logging.info(''.join(output))

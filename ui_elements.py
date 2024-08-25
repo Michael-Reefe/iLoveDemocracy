@@ -155,19 +155,23 @@ class STVView(discord.ui.View):
 class PollButton(discord.ui.Button):
 
     def __init__(self, nj):
-        super().__init__(row=0, label=f'{nj+1}', style=discord.ButtonStyle.grey)
+        super().__init__(row=0, label=f'{nj+1} ⭐', style=discord.ButtonStyle.grey)
         self.nj = nj
         self.pressed = False
     
     async def callback(self, interaction):
         # if another button in the current view is pressed, unpress it
         for button in self.view.buttons:
-            if button.pressed:
+            if button.pressed and button is not self:
                 button.pressed = False
                 button.style = discord.ButtonStyle.grey
         # press the current button
-        self.style = discord.ButtonStyle.blurple
-        self.pressed = True
+        if not self.pressed:
+            self.style = discord.ButtonStyle.blurple
+            self.pressed = True
+        else:
+            self.style = discord.ButtonStyle.grey
+            self.pressed = False
         await interaction.response.edit_message(view=self.view)
 
 
