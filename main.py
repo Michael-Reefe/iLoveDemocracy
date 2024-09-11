@@ -212,12 +212,12 @@ class Poll:
         embed = discord.Embed(title=self.name, description=self.description, color=discord.Color.from_str('#663399'),
                               timestamp=datetime.datetime.now())   # rebeccapurple
         places = ''
-        if self.type == 'STV':
-            for i in range(len(self.choices)):
-                places += f'**0**   *{ui_elements.get_place_str(i+1)}-choice votes*\n'
-        elif self.type == 'STAR':
-            for i in range(5,-1,-1):
-                places += f'**0**   *{i} ⭐ votes*\n'
+        # if self.type == 'STV':
+        #     for i in range(len(self.choices)):
+        #         places += f'**0**   *{ui_elements.get_place_str(i+1)}-choice votes*\n'
+        # elif self.type == 'STAR':
+        #     for i in range(5,-1,-1):
+        #         places += f'**0**   *{i} ⭐ votes*\n'
         for i, choice in enumerate(self.choices):
             embed.add_field(name=choice, value=places, inline=True)
         embed.set_footer(text=f'{self.n_votes} voter(s)\nThis poll closes in {ui_elements.time_formatter(self.timeout)}')
