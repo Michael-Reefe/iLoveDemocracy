@@ -233,16 +233,16 @@ class Poll:
         if time_remaining > 0:
             logging.info('Updating poll embed')
             places = ['' for _ in range(len(self.choices))]
-            if self.type == 'STV':
-                for i in range(len(self.choices)):
-                    for j in range(len(self.choices)):
-                        current_votes = np.sum(self.ballots[j,:] == i+1)
-                        places[j] += f'**{current_votes}**   *{ui_elements.get_place_str(i+1)}-choice votes*\n'
-            elif self.type == 'STAR':
-                for i in range(5,-1,-1):
-                    for j in range(len(self.choices)):
-                        current_votes = np.sum(self.ballots[j,:] == i)
-                        places[j] += f'**{current_votes}**   *{i} ⭐ votes*\n'
+            # if self.type == 'STV':
+            #     for i in range(len(self.choices)):
+            #         for j in range(len(self.choices)):
+            #             current_votes = np.sum(self.ballots[j,:] == i+1)
+            #             places[j] += f'**{current_votes}**   *{ui_elements.get_place_str(i+1)}-choice votes*\n'
+            # elif self.type == 'STAR':
+            #     for i in range(5,-1,-1):
+            #         for j in range(len(self.choices)):
+            #             current_votes = np.sum(self.ballots[j,:] == i)
+            #             places[j] += f'**{current_votes}**   *{i} ⭐ votes*\n'
             # update items
             for i, choice in enumerate(self.choices):
                 self.embed.set_field_at(i, name=choice, value=places[i])
