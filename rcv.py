@@ -39,7 +39,7 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
 
         msg = f'### VOTE TALLIES FOR ROUND {j} ###'
         output[j] = msg + '\n'
-        output[j] += print_vote_tallies(candidates_padded, votes, n_votes, won)
+        output[j] += print_vote_tallies(candidates_padded, votes, n_votes, won, eliminated)
         msg = f'####################################'
         output[j] += msg + '\n'
 
@@ -50,10 +50,14 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
             winner_votes = votes[won]
             votes[won] = -999
             votes[eliminated] = -999
-            wh = np.where(votes >= n_to_win)[0][0]
+            wh = np.where(votes >= n_to_win)[0]
             # set them back
             votes[won] = winner_votes
             votes[eliminated] = 0
+        
+            # the "tiebreaker" function handles cases where multiple candidates are tied for first
+            # by looking at lower-ranked votes
+            wh = tiebreaker(ballots, wh)
 
             msg = f'RESULTS: {candidates_padded[wh]} HAS WON THE ELECTION WITH {str(int(votes[wh])).zfill(4)} VOTES ({votes[wh]/n_votes*100:.1f}%)'
             current_winners += 1 
@@ -66,7 +70,7 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
                 # do a final print-out
                 msg = f'### FINAL VOTE TALLIES       ###'
                 output[j] += msg + '\n'
-                output[j] += print_vote_tallies(candidates_padded, votes, n_votes, won, final=True)
+                output[j] += print_vote_tallies(candidates_padded, votes, n_votes, won, eliminated, final=True)
                 msg = f'################################'
                 output[j] += msg + '\n'
 
@@ -113,7 +117,7 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
             # do a final print-out
             msg = f'### FINAL VOTE TALLIES       ###'
             output[j] += msg + '\n'
-            output[j] += print_vote_tallies(candidates_padded, votes, n_votes, won, final=True)
+            output[j] += print_vote_tallies(candidates_padded, votes, n_votes, won, eliminated, final=True)
             msg = f'################################'
             output[j] += msg + '\n'
 
@@ -134,7 +138,9 @@ def run_election(candidates: np.ndarray, ballots: np.ndarray, n_winners: int = 1
         votes[eliminated] = 0
         votes[won] = winner_votes
 
-        last = last[0]
+        # the "tiebreaker" function handles cases where multiple candidates are tied for last place
+        # by considering their lower ranked votes
+        last = tiebreaker(ballots, last)
         eliminated[last] = True
 
         wh = np.where(ballots[last,:] == 1)[0]
@@ -164,13 +170,40 @@ def shift_ballots(wh, ballots, eliminated, won):
     return ballots
 
 
-def print_vote_tallies(candidates_padded, votes, n_votes, won, final=False):
+def print_vote_tallies(candidates_padded, votes, n_votes, won, eliminated, final=False):
     output = ''
     for c in range(len(candidates_padded)):
-        status = 'WON       ' if won[c] else 'RUNNING   ' if (votes[c] > 0 and not final) else 'ELIMINATED'
+        status = 'WON       ' if won[c] else 'ELIMINATED' if eliminated[c] else 'RUNNING   '
         msg = f'{status} | {candidates_padded[c]} | {str(int(votes[c])).zfill(4)} | {votes[c]/n_votes*100:.1f}%'
         output += msg + '\n'
     return output
+
+
+def tiebreaker(ballots, wh):
+
+    # Handle ties more smartly!!
+    place_check = 2
+    ballots_wh = ballots[wh, :]
+    while len(wh) > 1:
+
+        if place_check > ballots.shape[0]:
+            # if we get all the way to last place and they're still tied, FML I guess
+            break
+
+        # multiple candidates have tied - who should we let win and/or eliminate?
+        # check their lower-ranked votes, starting with 2nd place
+        place_votes = np.sum(ballots_wh == place_check, axis=1)
+
+        minvote = np.min(place_votes)
+        wh_new = np.where(place_votes == minvote)[0]
+        wh = wh[wh_new]
+        ballots_wh = ballots_wh[wh_new, :]
+    
+        place_check += 1
+    
+    wh = wh[0]
+
+    return wh
 
 
 def simulate_election(n_winners=1):
@@ -183,4 +216,4 @@ def simulate_election(n_winners=1):
         ballots[:,i] = np.arange(1,len(candidates)+1)
         np.random.shuffle(ballots[:,i])
     
-    run_election(candidates, ballots, n_winners)
+    return run_election(candidates, ballots, n_winners)
